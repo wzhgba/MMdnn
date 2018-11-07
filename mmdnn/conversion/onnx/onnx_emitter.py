@@ -33,7 +33,7 @@ class OnnxEmitter(Emitter):
     @property
     def header_code(self):
         return """import numpy as np
-from onnx import helper, TensorProto
+from onnx import helper, TensorProto, shape_inference
 import onnx
 
 __weights_dict = dict()
@@ -85,6 +85,8 @@ def KitModel(weight_file = None):
                                                                                                  self.initializer))
                       )
         self.add_body(1, "return helper.make_model(graph, opset_imports=[helper.make_opsetid('', 6)])")
+        # self.add_body(1, "model = helper.make_model(graph, opset_imports=[helper.make_opsetid('', 6)])")
+        # self.add_body(1, "return shape_inference.infer_shapes(model)")
         return self.body_code
 
     def run(self, dstNetworkPath, dstWeightPath=None, phase='test'):
@@ -110,6 +112,26 @@ def KitModel(weight_file = None):
             # omit node of some type
             if IR_node.type == 'Shape' or IR_node.type == 'Pack':
                 continue
+
+            def repaire_output_shape(shape):
+                input_shape_list = []
+                for layer in self.IR_graph.topological_sort:
+                    if self.IR_graph.get_node(layer).type == "DataInput":
+                        input_shape_list.append([dim.size for dim in self.IR_graph.get_node(layer).IR_layer.attr["shape"].shape.dim])
+                        if len(input_shape_list[-1]) != 4:
+                            input_shape_list.pop()
+                if len(input_shape_list) == 0:
+                    return
+                for i in range(0,len(shape.dim)):
+                    if shape.dim[i].size == -1:
+                        shape.dim[i].size = input_shape_list[0][i] if input_shape_list[0][i] != -1 else 1
+                if len(shape.dim) == 4:
+                    temp = shape.dim[1].size
+                    shape.dim[1].size = shape.dim[3].size
+                    shape.dim[3].size = shape.dim[2].size
+                    shape.dim[2].size = temp
+
+            repaire_output_shape(IR_node.layer.attr["_output_shapes"].list.shape[0])
             shape_str = IRGraph.shapeToStr(IR_node.layer.attr["_output_shapes"].list.shape[0])
             if IR_node.layer.attr['dtype'].type == graph_pb2.DT_UNDEFINED:
                 IR_node.layer.attr['dtype'].type = graph_pb2.DT_FLOAT32
@@ -508,7 +530,17 @@ def KitModel(weight_file = None):
         self.nodes.append(IR_node.variable_name)
 
     def emit_Squeeze(self, IR_node):
-        IR_node.real_name = self.IR_graph.get_node(IR_node.in_edges[0]).real_name
+        axes = IR_node.get_attr('squeeze_dims')
+        if len(self.IR_graph.get_parent(IR_node.name, [0]).layer.attr['_output_shapes'].list.shape[0].dim) == 4:
+            for i in range(0,len(axes)):
+                axes[i] = self.transpose_map[axes[i]]
+        axes = ','.join('%s' % i for i in axes)
+        self.add_body(1, "{:15} = helper.make_node('Squeeze', inputs=['{}'], outputs=['{}'], axes=[{}])".format(
+                        IR_node.variable_name,
+                        self.parent_variable_name(IR_node),
+                        IR_node.variable_name,
+                        axes))
+        self.nodes.append(IR_node.variable_name)
 
     def emit_ReduceMean(self, IR_node):
         axes = IR_node.layer.attr['axes'].list.i[:]

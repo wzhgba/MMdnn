@@ -771,6 +771,9 @@ class TensorflowParser2(Parser):
 
     def rename_Squeeze(self, source_node):
         IR_node = self._convert_identity_operation(source_node, new_op = 'Squeeze')
+        kwargs = {}
+        kwargs['squeeze_dims'] = source_node.get_attr('squeeze_dims')
+        assign_IRnode_values(IR_node, kwargs)
 
 
     def rename_Gather(self, source_node):
