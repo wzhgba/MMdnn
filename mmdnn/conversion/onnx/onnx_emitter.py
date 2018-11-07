@@ -441,17 +441,23 @@ def KitModel(weight_file = None):
         self.nodes.append(IR_node.variable_name)
 
     def emit_Pad(self, IR_node):
-        mode = IR_node.layer.attr['mode'].s.decode()
-        pads = IR_node.get_attr('pads')
-        pad_length = len(pads)
-        pads = [0, 0] + pads[1:pad_length // 2 - 1] + [0, 0] + pads[pad_length // 2 + 1:pad_length - 1]
-        self.add_body(1, "{:15} = helper.make_node('Pad', inputs=['{}'], outputs=['{}'], mode='{}', pads={})".format(
-            IR_node.variable_name,
-            self.parent_variable_name(IR_node),
-            IR_node.variable_name,
-            mode,
-            pads))
-        self.nodes.append(IR_node.variable_name)
+        son_node = self.IR_graph.get_son(IR_node.name,[0])
+        if son_node.type in ["Conv", "Pool"] and -1 not in son_node.get_attr('pads'):
+            for i in range(0,len(son_node.layer.attr['pads'].list.i)):
+                son_node.layer.attr['pads'].list.i[i] += IR_node.get_attr('pads')[i]
+            IR_node.real_name = self.IR_graph.get_node(IR_node.in_edges[0]).real_name
+        else:
+            mode = IR_node.layer.attr['mode'].s.decode()
+            pads = IR_node.get_attr('pads')
+            pad_length = len(pads)
+            pads = [0, 0] + pads[1:pad_length // 2 - 1] + [0, 0] + pads[pad_length // 2 + 1:pad_length - 1]
+            self.add_body(1, "{:15} = helper.make_node('Pad', inputs=['{}'], outputs=['{}'], mode='{}', pads={})".format(
+                IR_node.variable_name,
+                self.parent_variable_name(IR_node),
+                IR_node.variable_name,
+                mode,
+                pads))
+            self.nodes.append(IR_node.variable_name)
 
     def emit_Concat(self, IR_node):
         axis = IR_node.get_attr('axis') - 2
