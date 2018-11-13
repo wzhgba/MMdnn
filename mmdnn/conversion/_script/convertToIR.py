@@ -13,7 +13,19 @@ def _convert(args):
         inputshape = [None]
     if args.srcFramework == 'caffe':
         from mmdnn.conversion.caffe.transformer import CaffeTransformer
-        transformer = CaffeTransformer(args.network, args.weights, "tensorflow", inputshape[0], phase = args.caffePhase)
+        from mmdnn.conversion.caffe.polish import CaffePolish
+        import os
+        caffe_model_name = "tmp_" + args.weights
+        if args.network != None:
+            caffe_prototxt_name = "tmp_" + args.network
+        else:
+            caffe_prototxt_name = None
+        CaffePolish(args.weights, caffe_model_name, args.network, caffe_prototxt_name)
+        transformer = CaffeTransformer(caffe_prototxt_name, caffe_model_name, "tensorflow", inputshape[0], phase = args.caffePhase)
+        if os.path.exists(caffe_model_name):
+            os.remove(caffe_model_name)
+        if caffe_prototxt_name != None and os.path.exists(caffe_prototxt_name):
+            os.remove(caffe_prototxt_name)
         graph = transformer.transform_graph()
         data = transformer.transform_data()
 
