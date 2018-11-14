@@ -18,14 +18,14 @@ def add_lost_scale_after_bn(caffemodel):
     replace_name_map = dict()
     # Rename layer input if using bn_output
     for index, layer in enumerate(src_layers):
-        for index, name in enumerate(layer.bottom):
+        for bottom_index, name in enumerate(layer.bottom):
             if name in replace_name_map.keys():
                 layer.bottom.remove(name)
-                layer.bottom.insert(index, replace_name_map[name])
-        for index, name in enumerate(layer.top):
+                layer.bottom.insert(bottom_index, replace_name_map[name])
+        for top_index, name in enumerate(layer.top):
             if name in replace_name_map.keys():
                 layer.top.remove(name)
-                layer.top.insert(index, replace_name_map[name])
+                layer.top.insert(top_index, replace_name_map[name])
         dst_layers.extend([layer])
         if layer.type == 'BatchNorm' and (index + 1 >= len(src_layers) or src_layers[index + 1].type != "Scale"):
             # BN (bn_input_name -> scale_input_name) 
