@@ -59,7 +59,7 @@ def add_lost_scale_after_bn(caffemodel):
         caffemodel.layer.pop()
     caffemodel.layer.extend(dst_layers)
 
-def CaffePolish(src_model_file, dst_model_file, src_prototxt = None, dst_prototxt = None):
+def caffe_polish(src_model_file, dst_model_file, src_prototxt = None, dst_prototxt = None):
     tmp_model_file = src_model_file
     
     if src_prototxt != None and dst_prototxt != None:

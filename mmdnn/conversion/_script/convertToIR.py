@@ -13,19 +13,19 @@ def _convert(args):
         inputshape = [None]
     if args.srcFramework == 'caffe':
         from mmdnn.conversion.caffe.transformer import CaffeTransformer
-        from mmdnn.conversion.caffe.polish import CaffePolish
+        from mmdnn.conversion.caffe.polish import caffe_polish
         import os
-        caffe_model_name = "tmp_" + args.weights
+        middle_model = "tmp_" + args.weights
         if args.network != None:
-            caffe_prototxt_name = "tmp_" + args.network
+            middle_prototxt = "tmp_" + args.network
         else:
-            caffe_prototxt_name = None
-        CaffePolish(args.weights, caffe_model_name, args.network, caffe_prototxt_name)
-        transformer = CaffeTransformer(caffe_prototxt_name, caffe_model_name, "tensorflow", inputshape[0], phase = args.caffePhase)
-        if os.path.exists(caffe_model_name):
-            os.remove(caffe_model_name)
-        if caffe_prototxt_name != None and os.path.exists(caffe_prototxt_name):
-            os.remove(caffe_prototxt_name)
+            middle_prototxt = None
+        caffe_polish(args.weights, middle_model, args.network, middle_prototxt)
+        transformer = CaffeTransformer(middle_prototxt, middle_model, "tensorflow", inputshape[0], phase = args.caffePhase)
+        if os.path.exists(middle_model):
+            os.remove(middle_model)
+        if middle_prototxt != None and os.path.exists(middle_prototxt):
+            os.remove(middle_prototxt)
         graph = transformer.transform_graph()
         data = transformer.transform_data()
 
@@ -93,8 +93,17 @@ def _convert(args):
 
     elif args.srcFramework == 'cntk':
         from mmdnn.conversion.cntk.cntk_parser import CntkParser
+        from mmdnn.conversion.cntk.cntk_polish import cntk_polish
+        import os
         model = args.network or args.weights
-        parser = CntkParser(model)
+
+        middle_model = "tmp_" + model
+        cntk_polish(model, middle_model)
+
+        parser = CntkParser(middle_model)
+
+        os.remove(middle_model)
+        
 
     elif args.srcFramework == 'pytorch':
         assert inputshape != None
