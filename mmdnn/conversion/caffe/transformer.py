@@ -282,6 +282,10 @@ class ParameterNamer(object):
                 names = ('mean', 'var')
                 if len(node.data) == 4:
                     names += ('scale', 'bias')
+            elif node.kind == NodeKind.Scale:
+                names = ('scale',)
+                if len(node.data) == 2:
+                    names += ('bias',)
             elif node.kind == NodeKind.PReLU:
                 names = ('gamma',)
             else:
