@@ -393,7 +393,7 @@ def KitModel(weight_file = None):
                 IR_node.variable_name + '_bias_array',
                 IR_node.name))
         else:
-            self.add_body(1, "{:15} = np.zeros({})".format(
+            self.add_body(1, "{:15} = np.zeros({}, dtype=np.float32)".format(
                 IR_node.variable_name + '_bias_array',
                 units))
         self.add_body(1, "{:15} = helper.make_node('Constant', inputs=[], outputs=['{}'], value=helper.make_tensor(name='const_tensor', data_type=onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[{}.dtype], dims={}.shape, vals={}.flatten().astype(float)))".format(

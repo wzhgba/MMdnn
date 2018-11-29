@@ -219,11 +219,26 @@ class CntkParser(Parser):
 
 
     def rename_Times(self, source_node):
-        IR_node = self._convert_identity_operation(source_node, new_op='FullyConnected')
-
         W = source_node.layer.parameters[0].asarray().squeeze()
+        if len(source_node.layer.inputs[0].shape) >= 3 and (source_node.layer.inputs[0].shape[1] != 1 or source_node.layer.inputs[0].shape[2] != 1):
+            from mmdnn.conversion.cntk.cntk_graph import CntkGraphNode
+            import cntk
+            # Add flatten layer before gemm
+            flatten_layer = cntk.flatten(0)
+            flatten_source_node = CntkGraphNode(flatten_layer)
+            IR_node = self._convert_identity_operation(flatten_source_node, new_op='Flatten', shape_transpose = False)
+            IR_node.name = source_node.name + "_flatten"
+            IR_node.input.append(source_node.name + "_flatten")
+            
+            # CHWN -> HWCN
+            assert len(W.shape) == 4
+            W = np.transpose(W, [1, 2, 0, 3])
+            in_shape = W.shape[0] * W.shape[1] * W.shape[2]
+            output_shape = W.shape[3]
+            W = W.reshape(in_shape, output_shape)
+            
+        IR_node = self._convert_identity_operation(source_node, new_op='FullyConnected')
         self.set_weight(source_node.name, 'weights', W)
-
         kwargs = dict()
         kwargs['units'] = W.shape[-1]
         kwargs['use_bias'] = self._fuse_bias_node(source_node)
