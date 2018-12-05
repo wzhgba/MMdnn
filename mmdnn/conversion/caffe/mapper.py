@@ -254,6 +254,12 @@ class NodeMapper(object):
         return Node.create('Scale', **kwargs)
 
     @classmethod
+    def map_power(cls, node):
+        kwargs = {'scale' : node.parameters.scale != 1, 'shift' : node.parameters.shift != 0, 'power' : node.parameters.power != 1}
+        cls._convert_output_shape(kwargs, node)
+        return Node.create('Power', **kwargs)
+
+    @classmethod
     def map_eltwise(cls, node):
         operations = {0: 'Mul', 1: 'Add', 2: 'Max'}
         op_code = node.parameters.operation

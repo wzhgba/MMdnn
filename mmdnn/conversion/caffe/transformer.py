@@ -168,7 +168,7 @@ class SubNodeFuser(object):
                 # We're only fusing nodes with single parents
                 continue
             parent, from_output = node.get_only_parent()
-            if len(parent.children) != 1:
+            if len(parent.children) != 1 and node.kind != NodeKind.Power:
                 # We can only fuse a node if its parent's
                 # value isn't used by any other node.
                 continue
@@ -265,6 +265,32 @@ class BatchNormPreprocessor(object):
         return graph
 
 
+class PowerFuser(SubNodeFuser):
+    '''
+    The original power in caffe includes three learned
+    parameters: scaling factor, shift factor and a power factor.
+    The power layer can be fused when scale = 1, shift = 0 and power = 1.
+    '''
+
+    def is_eligible_pair(self, parent, child):
+        return (child.kind == NodeKind.Power and child.parameters.scale == 1 and 
+                child.parameters.shift == 0 and child.parameters.power == 1)
+
+    def merge(self, parent, child):
+        return 
+
+class PowerPreprocessor(object):
+    def __call__(self, graph):
+        for node in graph.nodes:
+            if node.kind == NodeKind.Power:
+                node.data = [
+                    np.array([node.parameters.scale], dtype = 'float32'),
+                    np.array([node.parameters.shift], dtype = 'float32'),
+                    np.array([node.parameters.power], dtype = 'float32')
+                ]
+        return graph
+
+
 class ParameterNamer(object):
     '''
     Convert layer data arrays to a dictionary mapping parameter names to their values.
@@ -286,6 +312,8 @@ class ParameterNamer(object):
                 names = ('scale',)
                 if len(node.data) == 2:
                     names += ('bias',)
+            elif node.kind == NodeKind.Power:
+                names = ('scale', 'shift', 'power')
             elif node.kind == NodeKind.PReLU:
                 names = ('gamma',)
             else:
@@ -326,7 +354,9 @@ class CaffeTransformer(object):
             graph = graph.transformed([
                 self.data_injector if self.data_injector else DataInjector(def_path, data_path), # Load and associate learned parameters
                 BatchNormScaleBiasFuser(),
-                BatchNormPreprocessor() # Pre-process batch normalization data
+                BatchNormPreprocessor(), # Pre-process batch normalization data
+                PowerFuser(),
+                PowerPreprocessor()  # Pre-process power data
             ])
             target_toolkit = target_toolkit.lower()
             if target_toolkit not in ('caffe', 'caffe2'):
