@@ -439,7 +439,9 @@ class CaffeTransformer(object):
             input_of_next = node.get_only_parent()[0]
             next_node = node.children
             for next in next_node:
-                next.parents[0] = tuple([input_of_next, next.parents[0][1]])
+                for parent_index in range(len(next.parents)):
+                    if next.parents[parent_index][0] == node:
+                        next.parents[parent_index] = tuple([input_of_next, next.parents[parent_index][1]])
 
         else:
             mapped_node.name = node.name

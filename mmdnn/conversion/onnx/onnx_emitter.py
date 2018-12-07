@@ -221,6 +221,63 @@ def KitModel(weight_file = None):
         self.nodes.append(IR_node.variable_name + '_weight')
         self.nodes.append(IR_node.variable_name)
 
+    def emit_ConvTranspose(self, IR_node):
+        kernel_shape = list(IR_node.get_attr('kernel_shape'))[:-2]
+        dilations = list(IR_node.get_attr('dilations', [1] * (len(kernel_shape) + 2)))[1:-1]
+        group = IR_node.get_attr('group', 1)
+        pads = IR_node.get_attr('pads')
+        pad_length = len(pads)
+        pads = pads[1:pad_length // 2 - 1] + pads[pad_length // 2 + 1:pad_length - 1]
+        strides = list(IR_node.get_attr('strides'))[1:-1]
+        use_bias=IR_node.get_attr('use_bias')
+        self.add_body(1, "{:15} = __weights_dict['{}']['weights']".format(
+            IR_node.variable_name + '_weight_array',
+            IR_node.name))
+        self.add_body(1, "{} = {}.transpose([3,2,0,1])".format(
+            IR_node.variable_name + '_weight_array',
+            IR_node.variable_name + '_weight_array'))
+        self.add_body(1, "{:15} = helper.make_node('Constant', inputs=[], outputs=['{}'], value=helper.make_tensor(name='const_tensor', data_type=onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[{}.dtype], dims={}.shape, vals={}.flatten().astype(float)))".format(
+                          IR_node.variable_name + '_weight',
+                          IR_node.variable_name + '_weight',
+                          IR_node.variable_name + '_weight_array',
+                          IR_node.variable_name + '_weight_array',
+                          IR_node.variable_name + '_weight_array'))
+        if use_bias:
+            self.add_body(1, "{:15} = __weights_dict['{}']['bias']".format(
+                IR_node.variable_name + '_bias_array',
+                IR_node.name))
+            self.add_body(1, "{:15} = helper.make_node('Constant', inputs=[], outputs=['{}'], value=helper.make_tensor(name='const_tensor', data_type=onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[{}.dtype], dims={}.shape, vals={}.flatten().astype(float)))".format(
+                              IR_node.variable_name + '_bias',
+                              IR_node.variable_name + '_bias',
+                              IR_node.variable_name + '_bias_array',
+                              IR_node.variable_name + '_bias_array',
+                              IR_node.variable_name + '_bias_array'))
+            self.add_body(1, "{:15} = helper.make_node('ConvTranspose', inputs=['{}', '{}', '{}'],outputs=['{}'], dilations={}, group={}, kernel_shape={}, pads={}, strides={})".format(
+                              IR_node.variable_name,
+                              self.parent_variable_name(IR_node),
+                              IR_node.variable_name + '_weight',
+                              IR_node.variable_name + '_bias',
+                              IR_node.variable_name,
+                              dilations,
+                              group,
+                              kernel_shape,
+                              pads,
+                              strides))
+            self.nodes.append(IR_node.variable_name + '_bias')
+        else:
+            self.add_body(1, "{:15} = helper.make_node('ConvTranspose', inputs=['{}', '{}'],outputs=['{}'], dilations={}, group={}, kernel_shape={}, pads={}, strides={})".format(
+                              IR_node.variable_name,
+                              self.parent_variable_name(IR_node),
+                              IR_node.variable_name + '_weight',
+                              IR_node.variable_name,
+                              dilations,
+                              group,
+                              kernel_shape,
+                              pads,
+                              strides))
+        self.nodes.append(IR_node.variable_name + '_weight')
+        self.nodes.append(IR_node.variable_name)
+
     def emit_BatchNorm(self, IR_node):
         epsilon = IR_node.get_attr('epsilon')
         if IR_node.get_attr('scale'):
