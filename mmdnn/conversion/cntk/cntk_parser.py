@@ -228,7 +228,7 @@ class CntkParser(Parser):
             flatten_source_node = CntkGraphNode(flatten_layer)
             IR_node = self._convert_identity_operation(flatten_source_node, new_op='Flatten', shape_transpose = False)
             IR_node.name = source_node.name + "_flatten"
-            IR_node.input.append(source_node.name + "_flatten")
+            IR_node.input.append(source_node.in_edges[0])
             
             # CHWN -> HWCN
             assert len(W.shape) == 4
@@ -238,6 +238,7 @@ class CntkParser(Parser):
             W = W.reshape(in_shape, output_shape)
             
         IR_node = self._convert_identity_operation(source_node, new_op='FullyConnected')
+        IR_node.input[0] = source_node.name + "_flatten"
         self.set_weight(source_node.name, 'weights', W)
         kwargs = dict()
         kwargs['units'] = W.shape[-1]
