@@ -574,7 +574,7 @@ def KitModel(weight_file = None):
             self.nodes.append(IR_node.variable_name)
 
     def emit_Concat(self, IR_node):
-        axis = IR_node.get_attr('axis') - 2
+        axis = (IR_node.get_attr('axis') - 2) % 4
         inputs = ', '.join("'" + self.IR_graph.get_node(i).real_variable_name + "'" for i in IR_node.in_edges)
         self.add_body(1, "{:15} = helper.make_node('Concat', inputs=[{}], outputs=['{}'], axis={})".format(
             IR_node.variable_name,
