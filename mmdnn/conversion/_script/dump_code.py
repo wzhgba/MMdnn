@@ -26,7 +26,6 @@ def dump_code(framework, network_filepath, weight_filepath, dump_filepath, dump_
         return 0
 
     elif framework == 'onnx':
-        from mmdnn.conversion.onnx.onnx_model_polish import polish_onnx_model
         from mmdnn.conversion.onnx.saver import save_model
     else:
         raise NotImplementedError("{} saver is not finished yet.".format(framework))

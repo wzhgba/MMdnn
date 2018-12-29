@@ -8,7 +8,7 @@ def optimize_onnx_model(onnx_model):
     try:
         onnx_model = optimizer.optimize(onnx_model, passes=["nop", "eliminate_identity", "eliminate_nop_transpose", "eliminate_nop_pad",
                                                             "eliminate_unused_initializer", "fuse_consecutive_squeezes", "fuse_consecutive_transposes", "fuse_add_bias_into_conv", "fuse_transpose_into_gemm"])
-    except RuntimeError:
+    except:
         pass
     return onnx_model
 
@@ -195,7 +195,7 @@ def last_shape_inference(onnx_model):
         del onnx_model.graph.value_info[0]
     return shape_inference.infer_shapes(onnx_model)
 
-def polish_onnx_model(onnx_model):
+def onnx_polish(onnx_model):
     onnx_model = optimize_onnx_model(onnx_model)
     onnx_model = move_all_constant_node_into_initializer(onnx_model)
     onnx_model = fuse_bn_into_conv(onnx_model)

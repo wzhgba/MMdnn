@@ -22,10 +22,10 @@ def _convert(args):
             middle_prototxt = None
         caffe_polish(args.weights, middle_model, args.network, middle_prototxt)
         transformer = CaffeTransformer(middle_prototxt, middle_model, "tensorflow", inputshape[0], phase = args.caffePhase)
-        if os.path.exists(middle_model):
-            os.remove(middle_model)
-        if middle_prototxt != None and os.path.exists(middle_prototxt):
-            os.remove(middle_prototxt)
+        #if os.path.exists(middle_model):
+            #os.remove(middle_model)
+        #if middle_prototxt != None and os.path.exists(middle_prototxt):
+            #os.remove(middle_prototxt)
         graph = transformer.transform_graph()
         data = transformer.transform_data()
 
