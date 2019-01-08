@@ -1,5 +1,5 @@
 import onnx
-from mmdnn.conversion.onnx.onnx_polish import *
+from mmdnn.conversion.onnx.onnx_polish import onnx_polish
 
 
 def save_model(MainModel, network_filepath, weight_filepath, dump_filepath):

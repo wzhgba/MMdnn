@@ -12,22 +12,27 @@ def create_prototxt(model, src_prototxt):
     prototxt_file.write(str(model_copied))
     prototxt_file.close()
 
-def add_lost_scale_after_bn(caffemodel):
-    src_layers = caffemodel.layer
+
+def rename_top_and_bottom(replace_name_map, layer):
+    for bottom_index, name in enumerate(layer.bottom):
+        if name in replace_name_map.keys():
+            layer.bottom.remove(name)
+            layer.bottom.insert(bottom_index, replace_name_map[name])
+    for top_index, name in enumerate(layer.top):
+        if name in replace_name_map.keys():
+            layer.top.remove(name)
+            layer.top.insert(top_index, replace_name_map[name])
+
+def add_lost_scale_after_bn(caffe_model):
+    src_layers = caffe_model.layer
     dst_layers = caffe_pb2.NetParameter().layer
     replace_name_map = dict()
     # Rename layer input if using bn_output
     for index, layer in enumerate(src_layers):
-        for bottom_index, name in enumerate(layer.bottom):
-            if name in replace_name_map.keys():
-                layer.bottom.remove(name)
-                layer.bottom.insert(bottom_index, replace_name_map[name])
-        for top_index, name in enumerate(layer.top):
-            if name in replace_name_map.keys():
-                layer.top.remove(name)
-                layer.top.insert(top_index, replace_name_map[name])
+        rename_top_and_bottom(replace_name_map, layer)
         dst_layers.extend([layer])
-        if layer.type == 'BatchNorm' and (index + 1 >= len(src_layers) or src_layers[index + 1].type != 'Scale'):
+        if layer.type == 'BatchNorm' and (index + 1 >= len(src_layers) or src_layers[index + 1].type != "Scale"):
+            print('Merge bn + scale in layer ' + str(layer.name))
             # BN (bn_input_name -> scale_input_name) 
             # Scale (scale_input_name -> scale_output_name)
             bn_origin_output_name = layer.top[0]
@@ -55,24 +60,17 @@ def add_lost_scale_after_bn(caffemodel):
             scale_layer.scale_param.bias_term = True
             # Add scale layer
             dst_layers.extend([scale_layer])
-    for index in range(0, len(caffemodel.layer)):
-        caffemodel.layer.pop()
-    caffemodel.layer.extend(dst_layers)
+    for index in range(0, len(caffe_model.layer)):
+        caffe_model.layer.pop()
+    caffe_model.layer.extend(dst_layers)
 
-def split_bnmsra_into_bn_and_scale(caffemodel):
-    src_layers = caffemodel.layer
+def split_bnmsra_into_bn_and_scale(caffe_model):
+    src_layers = caffe_model.layer
     dst_layers = caffe_pb2.NetParameter().layer
     replace_name_map = dict()
     # Rename layer input if using bn_output
-    for index, layer in enumerate(src_layers):
-        for bottom_index, name in enumerate(layer.bottom):
-            if name in replace_name_map.keys():
-                layer.bottom.remove(name)
-                layer.bottom.insert(bottom_index, replace_name_map[name])
-        for top_index, name in enumerate(layer.top):
-            if name in replace_name_map.keys():
-                layer.top.remove(name)
-                layer.top.insert(top_index, replace_name_map[name])
+    for layer in src_layers:
+        rename_top_and_bottom(replace_name_map, layer)
         dst_layers.extend([layer])
 
         if layer.type == 'BatchNormMSRA':
@@ -111,22 +109,24 @@ def split_bnmsra_into_bn_and_scale(caffemodel):
             dst_layers[-1].blobs[3].shape.dim.append(channel)
             dst_layers[-1].blobs.remove(dst_layers[-1].blobs[0])
             dst_layers[-1].blobs.remove(dst_layers[-1].blobs[0])
-            mean_blob = dst_layers[-1].blobs.add()
-            mean_blob.shape.dim.append(1)
-            mean_blob.data.append(999.9823608398438)
+            move_blob = dst_layers[-1].blobs.add()
+            move_blob.shape.dim.append(1)
+            move_blob.data.append(1)
             dst_layers[-1].param.remove(dst_layers[-1].param[-1])
             dst_layers[-1].ClearField("batch_norm_msra_param")
             # Add scale layer
             dst_layers.extend([scale_layer])
 
-    for index in range(0, len(caffemodel.layer)):
-        caffemodel.layer.pop()
-    caffemodel.layer.extend(dst_layers)
+    for index in range(0, len(caffe_model.layer)):
+        caffe_model.layer.pop()
+    caffe_model.layer.extend(dst_layers)
+
 
 def caffe_polish(src_model_file, dst_model_file, src_prototxt = None, dst_prototxt = None):
     tmp_model_file = None
     if src_prototxt != None and dst_prototxt != None:
-        tmp_model_file = 'temp_' + src_model_file
+        tmp_model_file = "temp_" + src_model_file
+        # Convert caffe_model + prototxt -> temp caffe_model
         net = caffe.Net(src_prototxt, src_model_file, caffe.TEST)
         net.save(tmp_model_file)
         file = open(tmp_model_file, 'rb')
@@ -143,7 +143,6 @@ def caffe_polish(src_model_file, dst_model_file, src_prototxt = None, dst_protot
     file = open(dst_model_file, 'wb')
     file.write(caffe_model.SerializeToString())
     file.close()
-    
     if src_prototxt != None and dst_prototxt != None:
         if tmp_model_file != None and os.path.exists(tmp_model_file):
             os.remove(tmp_model_file)

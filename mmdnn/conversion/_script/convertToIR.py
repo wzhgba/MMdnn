@@ -15,17 +15,17 @@ def _convert(args):
         from mmdnn.conversion.caffe.transformer import CaffeTransformer
         from mmdnn.conversion.caffe.polish import caffe_polish
         import os
-        middle_model = "tmp_" + args.weights
+        middle_model = "middle_" + args.weights
         if args.network != None:
-            middle_prototxt = "tmp_" + args.network
+            middle_prototxt = "middle_" + args.network
         else:
             middle_prototxt = None
         caffe_polish(args.weights, middle_model, args.network, middle_prototxt)
         transformer = CaffeTransformer(middle_prototxt, middle_model, "tensorflow", inputshape[0], phase = args.caffePhase)
-        #if os.path.exists(middle_model):
-            #os.remove(middle_model)
-        #if middle_prototxt != None and os.path.exists(middle_prototxt):
-            #os.remove(middle_prototxt)
+        if os.path.exists(middle_model):
+            os.remove(middle_model)
+        if middle_prototxt != None and os.path.exists(middle_prototxt):
+            os.remove(middle_prototxt)
         graph = transformer.transform_graph()
         data = transformer.transform_data()
 
