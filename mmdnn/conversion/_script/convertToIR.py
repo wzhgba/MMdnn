@@ -15,9 +15,9 @@ def _convert(args):
         from mmdnn.conversion.caffe.transformer import CaffeTransformer
         from mmdnn.conversion.caffe.polish import caffe_polish
         import os
-        middle_model = "middle_" + args.weights
+        middle_model = args.weights + ".middle"
         if args.network != None:
-            middle_prototxt = "middle_" + args.network
+            middle_prototxt = args.network + ".middle"
         else:
             middle_prototxt = None
         caffe_polish(args.weights, middle_model, args.network, middle_prototxt)
