@@ -184,6 +184,8 @@ class CntkParser(Parser):
 
         kwargs['use_bias'] = self._fuse_bias_node(source_node)
 
+        kwargs['group'] = attributes['groups']
+
         assign_IRnode_values(IR_node, kwargs)
 
 
