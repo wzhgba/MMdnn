@@ -102,8 +102,8 @@ def fuse_bn_into_conv(onnx_model):
                                  onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[onnx_model.graph.initializer[initializers_name_to_id_dict[node.input[4]]].data_type])
 
             position = 0
-            fuse_conv_w = np.ndarray(channel * (conv_w.shape[0] // channel))
-            fuse_conv_b = np.ndarray(channel)
+            fuse_conv_w = np.ndarray(channel * (conv_w.shape[0] // channel),onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[onnx_model.graph.initializer[initializers_name_to_id_dict[conv_node.input[1]]].data_type])
+            fuse_conv_b = np.ndarray(channel,onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[onnx_model.graph.initializer[initializers_name_to_id_dict[conv_node.input[2]]].data_type]) if len(conv_node.input) > 2 else np.zeros([channel], onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[onnx_model.graph.initializer[initializers_name_to_id_dict[conv_node.input[1]]].data_type])
             for i in range(0, channel):
                 s = bn_s[i] / math.sqrt(bn_v[i] + eps)
                 b = bn_b[i] - bn_m[i] * s
