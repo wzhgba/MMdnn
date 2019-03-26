@@ -230,6 +230,7 @@ class CntkParser(Parser):
             IR_node = self._convert_identity_operation(flatten_source_node, new_op='Flatten', shape_transpose = False)
             IR_node.name = source_node.name + "_flatten"
             IR_node.input.append(source_node.in_edges[0])
+            gemm_input_name = source_node.name + "_flatten"
             
             # CHWN -> HWCN
             assert len(W.shape) == 4
@@ -237,9 +238,11 @@ class CntkParser(Parser):
             in_shape = W.shape[0] * W.shape[1] * W.shape[2]
             output_shape = W.shape[3]
             W = W.reshape(in_shape, output_shape)
-            
+        else:
+            gemm_input_name = source_node.in_edges[0]
+
         IR_node = self._convert_identity_operation(source_node, new_op='FullyConnected')
-        IR_node.input[0] = source_node.name + "_flatten"
+        IR_node.input[0] = gemm_input_name
         self.set_weight(source_node.name, 'weights', W)
         kwargs = dict()
         kwargs['units'] = W.shape[-1]

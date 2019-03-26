@@ -102,20 +102,20 @@ def fuse_bn_into_conv(onnx_model):
                                  onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[onnx_model.graph.initializer[initializers_name_to_id_dict[node.input[4]]].data_type])
 
             position = 0
-            conv_w.setflags(write=1)
-            conv_b.setflags(write=1)
+            fuse_conv_w = np.ndarray(channel * (conv_w.shape[0] // channel))
+            fuse_conv_b = np.ndarray(channel)
             for i in range(0, channel):
                 s = bn_s[i] / math.sqrt(bn_v[i] + eps)
                 b = bn_b[i] - bn_m[i] * s
                 for j in range(0, conv_w.shape[0] // channel):
-                    conv_w[position] = conv_w[position] * s
+                    fuse_conv_w[position] = conv_w[position] * s
                     position += 1
-                conv_b[i] = conv_b[i] * s + b
+                fuse_conv_b[i] = conv_b[i] * s + b
 
             onnx_model.graph.initializer[initializers_name_to_id_dict[conv_node.input[1]]
-                                         ].raw_data = conv_w.tobytes()
+                                         ].raw_data = fuse_conv_w.tobytes()
             if len(conv_node.input) > 2:
-                onnx_model.graph.initializer[initializers_name_to_id_dict[conv_node.input[2]]].raw_data = conv_b.tobytes(
+                onnx_model.graph.initializer[initializers_name_to_id_dict[conv_node.input[2]]].raw_data = fuse_conv_b.tobytes(
                 )
             else:
                 tensor_name = conv_node.input[1] + "-polish-bias-added"
