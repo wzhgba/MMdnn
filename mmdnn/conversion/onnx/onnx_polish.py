@@ -123,7 +123,7 @@ def fuse_bn_into_conv(onnx_model):
                                                 data_type=onnx_model.graph.initializer[
                                                     initializers_name_to_id_dict[conv_node.input[1]]].data_type,
                                                 dims=[channel],
-                                                vals=conv_b.tobytes(), raw=True)
+                                                vals=fuse_conv_b.tobytes(), raw=True)
                 new_tensor_value_info = helper.make_tensor_value_info(name=tensor_name,
                                                                       elem_type=onnx_model.graph.initializer[
                                                                           initializers_name_to_id_dict[conv_node.input[1]]].data_type,
