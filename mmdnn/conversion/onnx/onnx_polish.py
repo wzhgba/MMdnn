@@ -165,6 +165,149 @@ def remove_dropout(onnx_model):
             current_node += 1
     return onnx_model
 
+def find_mul_add(onnx_model):
+    whose_input = {}
+    whose_output = {}
+    for node in onnx_model.graph.node:
+        for input_tensor in node.input:
+            if input_tensor not in whose_input.keys():
+                whose_input[input_tensor] = [node,]
+            else:
+                whose_input[input_tensor].append(node)
+        for output_tensor in node.output:
+            if output_tensor not in whose_output.keys():
+                whose_output[output_tensor] = [node,]
+            else:
+                whose_output[output_tensor].append(node)
+    
+    for name,item in whose_output.items():
+        if len(item) == 1 and item[0].op_type == "Mul" and name in whose_input.keys() and len(whose_input[name]) == 1 and whose_input[name][0].op_type == "Add":
+            mul_dimension = 0
+            check_channel_wise = True
+            for ini in onnx_model.graph.initializer:
+                if ini.name == item[0].input[1]:
+                    mul_dimension = ini.dims[0]
+                    if len(ini.dims) != 1 or ini.dims[0] == 1:
+                        check_channel_wise = False
+            for ini in onnx_model.graph.initializer:
+                if ini.name == whose_input[name][0].input[1]:
+                    if len(ini.dims) != 1 or ini.dims[0] == 1 or ini.dims[0] != mul_dimension:
+                        check_channel_wise = False
+            if check_channel_wise:
+                return True,item[0],whose_input[name][0]
+    
+    return False,None,None
+
+def fuse_mul_add_into_conv(onnx_model):
+    while True:
+        result, mul_node, add_node = find_mul_add(onnx_model)
+        if not result:
+            return onnx_model
+        
+        mul_node.op_type = "Conv"
+        mul_node.input.extend([add_node.input[1]])
+        channel = -1
+        for ini in onnx_model.graph.initializer:
+            if ini.name == mul_node.input[1]:
+                ini.dims.extend([1,1,1])
+                channel = ini.dims[0]
+        new_node = helper.make_node("Conv",["temp","temp","temp"],["temp"],kernel_shape=[1,1],pads=[0,0,0,0],strides=[1,1],group=channel)
+        mul_node.attribute.extend(new_node.attribute)
+        mul_node.output[0] = add_node.output[0]
+        for i in range(0,len(onnx_model.graph.node)):
+            if onnx_model.graph.node[i] == add_node:
+                del onnx_model.graph.node[i]
+                break
+
+def find_fuseable_bn(onnx_model):
+    for node in onnx_model.graph.node:
+        if node.op_type == "BatchNormalization":
+            channel = -1
+            check_bn = True
+            for ini in onnx_model.graph.initializer:
+                if ini.name in node.input:
+                    if channel != -1 and channel != ini.dims[0]:
+                        check_bn = False
+                    channel = ini.dims[0]
+            if not check_bn or channel == -1:
+                continue
+            
+            return True, node, channel
+    return False, None, None
+
+def change_bn_into_depthwise_conv(onnx_model):
+    while True:
+        result, bn_node, channel = find_fuseable_bn(onnx_model)
+        if not result:
+            return onnx_model
+        
+
+        for ini in onnx_model.graph.initializer:
+            if ini.name in bn_node.input:
+                pick_ini = ini
+                break
+        scale_np = np.zeros([channel],onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[pick_ini.data_type])
+        bias_np = np.zeros([channel],onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[pick_ini.data_type])
+        mean_np = np.zeros([channel],onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[pick_ini.data_type])
+        var_np = np.zeros([channel],onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[pick_ini.data_type])
+
+        merged_scale_np = np.zeros([channel],onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[pick_ini.data_type])
+        merged_bias_np = np.zeros([channel],onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[pick_ini.data_type])
+        for ini in onnx_model.graph.initializer:
+            if ini.name == bn_node.input[1]:
+                scale_np = np.frombuffer(ini.raw_data,onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[ini.data_type])
+            elif ini.name == bn_node.input[2]:
+                bias_np = np.frombuffer(ini.raw_data,onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[ini.data_type])
+            elif ini.name == bn_node.input[3]:
+                mean_np = np.frombuffer(ini.raw_data,onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[ini.data_type])
+            elif ini.name == bn_node.input[4]:
+                var_np = np.frombuffer(ini.raw_data,onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[ini.data_type])
+        
+        epsilon = 1e-5
+        for attr in bn_node.attribute:
+            if attr.name == "epsilon":
+                epsilon = attr.f
+
+        for i in range(0,channel):
+            var = math.sqrt(var_np[i]+epsilon)
+            merged_scale_np[i] = scale_np[i] / var
+            merged_bias_np[i] = bias_np[i] - merged_scale_np[i] * mean_np[i]
+        
+        bn_node.op_type = "Conv"
+        new_node = helper.make_node("Conv",["temp","temp","temp"],["temp"],kernel_shape=[1,1],pads=[0,0,0,0],strides=[1,1],group=channel)
+        while len(bn_node.attribute) > 0:
+            del bn_node.attribute[0]
+        bn_node.attribute.extend(new_node.attribute)
+
+        current_ini = 0
+
+        while current_ini < len(onnx_model.graph.initializer):
+            if onnx_model.graph.initializer[current_ini].name == bn_node.input[1]:
+                onnx_model.graph.initializer[current_ini].dims.extend([1,1,1])
+                onnx_model.graph.initializer[current_ini].raw_data = merged_scale_np.tobytes()
+                current_ini+=1
+            elif onnx_model.graph.initializer[current_ini].name == bn_node.input[2]:
+                onnx_model.graph.initializer[current_ini].raw_data = merged_bias_np.tobytes()
+                current_ini+=1
+            elif onnx_model.graph.initializer[current_ini].name == bn_node.input[3]:
+                del onnx_model.graph.initializer[current_ini]
+            elif onnx_model.graph.initializer[current_ini].name == bn_node.input[4]:
+                del onnx_model.graph.initializer[current_ini]
+            else:
+                current_ini+=1
+
+        current_input = 0
+        while current_input < len(onnx_model.graph.input):
+            if onnx_model.graph.input[current_input].name == bn_node.input[3]:
+                del onnx_model.graph.input[current_input]
+            elif onnx_model.graph.input[current_input].name == bn_node.input[4]:
+                del onnx_model.graph.input[current_input]
+            else:
+                current_input+=1
+        del bn_node.input[3]
+        del bn_node.input[3]
+
+            
 
 def clean_unused_initializers(onnx_model):
     tensors_appeared_list = []
@@ -200,5 +343,7 @@ def onnx_polish(onnx_model):
     onnx_model = move_all_constant_node_into_initializer(onnx_model)
     onnx_model = fuse_bn_into_conv(onnx_model)
     onnx_model = remove_dropout(onnx_model)
+    onnx_model = fuse_mul_add_into_conv(onnx_model)
+    onnx_model = change_bn_into_depthwise_conv(onnx_model)
     onnx_model = clean_unused_initializers(onnx_model)
     return onnx_model
