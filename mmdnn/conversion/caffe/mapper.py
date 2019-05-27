@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 import numpy as np
+import math
 
 from mmdnn.conversion.caffe.errors import ConversionError
 from mmdnn.conversion.caffe.common_graph import Node
@@ -65,8 +66,8 @@ class NodeMapper(object):
                 o_h_tf = int(node.kernel_parameters.s_h) * (input_shape.height - 1) + ko_h - 2 * int(node.kernel_parameters.p_h)
                 o_w_tf = int(node.kernel_parameters.s_w) * (input_shape.width - 1) + ko_w - 2 * int(node.kernel_parameters.p_w)
             else:
-                o_h_tf = (input_shape.height + node.kernel_parameters.p_h * 2 - ko_h + 1) // node.kernel_parameters.s_h
-                o_w_tf = (input_shape.width + node.kernel_parameters.p_w * 2 - ko_w + 1) // node.kernel_parameters.s_w
+                o_h_tf = math.ceil((input_shape.height + node.kernel_parameters.p_h * 2 - ko_h + 1) / node.kernel_parameters.s_h)
+                o_w_tf = math.ceil((input_shape.width + node.kernel_parameters.p_w * 2 - ko_w + 1) / node.kernel_parameters.s_w)
 
             kwargs['pads'] = [0, node.kernel_parameters.p_h, node.kernel_parameters.p_w, 0] + \
                     [0, node.kernel_parameters.p_h + o_h_caffe - o_h_tf, node.kernel_parameters.p_w + o_w_caffe - o_w_tf, 0]
