@@ -4,6 +4,7 @@
 #----------------------------------------------------------------------------------------------
 
 import cntk as _cntk
+import sys
 from mmdnn.conversion.common.DataStructure.graph import GraphNode, Graph
 
 
@@ -89,6 +90,7 @@ class CntkGraph(Graph):
         else:
             output = self.model.outputs[0].owner
 
+        sys.setrecursionlimit(10000)
         self.layer_map[output.uid] = CntkGraphNode(output)
         self._traverse_graph(output)
 

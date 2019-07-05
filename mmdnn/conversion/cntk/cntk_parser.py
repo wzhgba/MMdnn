@@ -63,6 +63,23 @@ class CntkParser(Parser):
 
         return [0] + lower + [0, 0] + upper + [0]
 
+    @staticmethod
+    def _repair_padding_with_auto_pad_false(pad,kernel_shape,input_shape,output_shape,strides):
+        for dim in range(0,2):
+            pad_upper_dim = dim + 1
+            pad_lower_dim = dim + 5
+            kernel_size = kernel_shape[dim + 1]
+            input_size = input_shape[dim + 1]
+            output_size = output_shape[dim + 1]
+            stride = strides[dim + 1]
+            cells = (output_size - 1) * stride + 1
+            extra = input_size - cells
+            center = extra // 2
+            pad[pad_upper_dim] = (kernel_size - 1) - (kernel_size - 1) // 2 - (extra - center)
+            pad[pad_lower_dim] = -(center - (kernel_size - 1) // 2)
+
+
+
 
     def _convert_identity_operation(self, source_node, start_edge=0, end_edge=None, new_op=None, shape_transpose=True):
         IR_node = self.IR_graph.node.add()
@@ -182,6 +199,8 @@ class CntkParser(Parser):
 
         kwargs['auto_pad'] = 'SAME_LOWER' if padding[0] else 'VALID'
         kwargs['pads'] = self._convert_padding_to_IR(kwargs['kernel_shape'][:-2], padding)
+        self._repair_padding_with_auto_pad_false(kwargs['pads'],[1] + kwargs['kernel_shape'][0:2],source_node.layer.arguments[0].shape,source_node.layer.shape,source_node.get_attr('strides'))
+
 
         kwargs['use_bias'] = self._fuse_bias_node(source_node)
 
@@ -229,7 +248,7 @@ class CntkParser(Parser):
             flatten_source_node = CntkGraphNode(flatten_layer)
             IR_node = self._convert_identity_operation(flatten_source_node, new_op='Flatten', shape_transpose = False)
             IR_node.name = source_node.name + "_flatten"
-            IR_node.input.append(source_node.in_edges[0])
+            IR_node.input.append(self.src_graph.get_node(source_node.in_edges[0]).real_name)
             gemm_input_name = source_node.name + "_flatten"
             
             # CHWN -> HWCN
@@ -327,6 +346,7 @@ class CntkParser(Parser):
             assert pad == padding[-1]
         kwargs['auto_pad'] = 'SAME_LOWER' if padding[0] else 'VALID'
         kwargs['pads'] = self._convert_padding_to_IR(kwargs['kernel_shape'][1:-1], padding)
+        self._repair_padding_with_auto_pad_false(kwargs['pads'],source_node.get_attr('poolingWindowShape'),source_node.layer.arguments[0].shape,source_node.layer.shape,source_node.get_attr('strides'))
 
         assign_IRnode_values(IR_node, kwargs)
 
@@ -453,6 +473,7 @@ class CntkParser(Parser):
 
         kwargs['auto_pad'] = 'SAME_LOWER' if padding[0] else 'VALID'
         kwargs['pads'] = self._convert_padding_to_IR(kwargs['kernel_shape'][:-2], padding)
+        self._repair_padding_with_auto_pad_false(kwargs['pads'],[1] + kwargs['kernel_shape'][0:2],source_node.layer.arguments[0].shape,source_node.layer.shape,source_node.get_attr('strides'))
 
         kwargs['use_bias'] = True
 
